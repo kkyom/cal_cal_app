@@ -1,136 +1,87 @@
 # 칼캘 (CalCal) — 칼로리 캘린더
 
-하루 섭취 칼로리와 탄·단·지를 캘린더로 기록하고, 목표 대비 진행 상황을 확인하는 Flutter 앱입니다.
+**오늘 뭘 먹었는지, 목표까지 얼마나 남았는지 캘린더 한 장으로.**
+
+칼캘은 하루 섭취 칼로리와 탄수화물·단백질·지방 양을 캘린더로 기록하고, 목표 대비 진행 상황을 한눈에 확인하는 식단 기록 앱입니다.
+
+<table>
+  <tr>
+    <td align="center"><img src="assets/help/help_1.png" width="200" alt="오늘의 칼로리와 영양 균형"></td>
+    <td align="center"><img src="assets/help/help_3.png" width="200" alt="날짜별 목표 달성 현황"></td>
+    <td align="center"><img src="assets/help/help_6.png" width="200" alt="음식 검색과 마이 식단"></td>
+    <td align="center"><img src="assets/help/help_7.png" width="200" alt="영양성분표 사진 인식"></td>
+  </tr>
+  <tr>
+    <td align="center">오늘의 칼로리와<br>영양 균형</td>
+    <td align="center">날짜별<br>목표 달성 현황</td>
+    <td align="center">검색하고<br>빠르게 기록</td>
+    <td align="center">영양성분표를<br>찍어서 기록</td>
+  </tr>
+</table>
+
+---
+
+## 이런 분께 추천해요
+
+- 다이어트 중인데 하루에 얼마나 먹어야 할지 감이 안 오는 분
+- 근육을 키우려고 단백질 섭취량을 챙기고 싶은 분
+- 식단 앱을 써봤지만 입력이 번거로워서 금방 그만둔 분
 
 ## 주요 기능
 
-- **식단 기록**: 날짜별 식사 기록, 칼로리·탄수화물·단백질·지방 대시보드
-- **음식 검색**: 식약처 식품영양성분DB(공공데이터포털) 기반 검색 + 서버 캐시
-- **영양성분표 스캔**: 카메라/앨범 사진을 Gemini로 인식해 영양성분 자동 입력 (일일 무료 한도)
-- **목표 설정**: 온보딩에서 신체 정보·목표를 받아 칼로리/매크로 목표 자동 계산
-- **알림**: 식사 기록 리마인더(로컬 알림), 매일 20:00 리마인더 푸시(FCM)
-- **로그인**: Google · Apple · Kakao 소셜 로그인, 닉네임, 회원 탈퇴
-- **기타**: 첫 실행 도움말 튜토리얼, 고객지원 문의, 약관/개인정보처리방침
+### 📅 캘린더로 보는 내 식단
+날짜마다 목표를 **달성했는지, 근접했는지, 벗어났는지** 색으로 표시돼요. 한 달 흐름이 한눈에 보입니다.
 
-> 광고(AdMob)와 인앱결제(구독)는 무료 출시를 위해 현재 비활성화되어 있습니다.
-> 코드는 남아 있으며 `pubspec.yaml`의 주석을 해제하면 복구할 수 있습니다.
+### 🎯 나에게 맞는 목표 자동 계산
+처음 시작할 때 나이, 현재 체중, 목표 체중, 평소 활동량, 목표(감량 · 유지 · 근육 증가)를 알려주세요. 하루 칼로리와 탄수화물·단백질·지방 목표를 자동으로 계산해 드려요. 목표 날짜를 바꾸면 그에 맞게 칼로리도 다시 조정됩니다.
 
-## 기술 스택
+### 🔍 음식 검색으로 간편 기록
+식품의약품안전처 식품영양성분 데이터베이스에서 음식을 검색해 바로 기록할 수 있어요. 섭취량만 입력하면 영양성분이 자동으로 계산됩니다.
 
-| 영역 | 사용 기술 |
-|---|---|
-| 앱 | Flutter (Dart ^3.11), iOS / Android |
-| 인증 | Firebase Auth (Google, Apple, Kakao → Custom Token) |
-| 데이터 | Cloud Firestore, Firebase App Check |
-| 서버 | Cloud Functions for Firebase (Node.js 20) |
-| 외부 API | 공공데이터포털 식품영양성분DB, Google Gemini, App Store Server API |
-| 알림 | Firebase Cloud Messaging, flutter_local_notifications |
+### 📸 영양성분표 사진으로 입력
+가공식품 뒷면의 영양성분표를 찍거나 앨범에서 고르면, AI가 열량과 탄·단·지 수치를 읽어 자동으로 채워줘요. 하루 **10회까지 무료**로 이용할 수 있어요.
 
-## 프로젝트 구조
+### ⭐ 마이 식단
+자주 먹는 음식에 별을 눌러 저장해 두세요. 다음부터는 검색 없이 바로 추가할 수 있어요.
 
-```
-lib/                  # Flutter 앱 소스
-  main.dart           # 진입점 (Firebase/App Check/Kakao SDK 초기화)
-  *_screen.dart       # 화면
-  *_service.dart      # Auth, Firestore, 알림, 구독 등 서비스 계층
-functions/            # Cloud Functions
-  index.js            # 함수 정의 (아래 표 참고)
-  certs/              # Apple 루트 인증서(공개 인증서)
-assets/help/          # 도움말 튜토리얼 이미지
-docs/                 # 개인정보처리방침, 이용약관, 운영 로그
-firestore.rules       # Firestore 보안 규칙
-```
+### 🔔 기록을 잊지 않게 알림
+- **하루 기록 리마인더**: 매일 저녁 8시까지 기록이 없으면 알려드려요.
+- **나만의 습관 알림**: 영양제 먹기, 운동하기 등 원하는 이름·요일·시간으로 직접 만들 수 있어요.
 
-### Cloud Functions
+## 시작하기
 
-| 함수 | 역할 |
-|---|---|
-| `searchFood` | 식약처 API 음식 검색 (Firestore 캐시) |
-| `parseNutritionLabel` | Gemini로 영양성분표 이미지 인식 |
-| `kakaoSignIn` | 카카오 토큰 검증 후 Firebase Custom Token 발급 |
-| `registerAppleRefreshToken` | Apple 로그인 refresh token 저장 (탈퇴 시 revoke용) |
-| `updateNickname` | 닉네임 중복 확인 및 변경 |
-| `deleteAccount` | 회원 탈퇴 (데이터 삭제 + Apple 토큰 revoke) |
-| `sendDailyReminderPush` | 매일 20:00(KST) 리마인더 푸시 |
-| `getOrCreateAppAccountToken` / `verifyPurchase` / `appStoreServerNotifications` | 인앱결제 구독 검증 (현재 비활성) |
+1. 앱을 설치하고 이용약관과 개인정보처리방침에 동의해요.
+2. **로그인 없이 바로 시작**할 수 있어요. Google · Apple · 카카오 계정으로 로그인하면 기록이 백업되고 여러 기기에서 이어서 쓸 수 있어요.
+3. 기초 정보와 목표를 입력하면 준비 끝! 첫 실행 때 나오는 짧은 사용법 안내를 참고하세요.
 
-## 개발 환경 설정
+> 로그인 없이 쓰다가 나중에 설정에서 로그인하면, 그동안의 기록을 계정에 그대로 이어서 저장할 수 있어요.
+> 단, 이미 칼캘에 가입한 적이 있는 계정으로 로그인하면 기존 계정으로 전환되고, 로그인 전 기록은 옮겨지지 않아요.
 
-비밀값과 Firebase 설정 파일은 저장소에 포함되어 있지 않습니다. 아래 파일을 직접 준비해야 합니다.
+## 자주 묻는 질문
 
-### 1. Firebase 설정 파일
+**Q. 무료인가요?**
+네, 모든 기능을 무료로 이용할 수 있어요. 영양성분표 AI 인식만 하루 10회로 제한돼요.
 
-[FlutterFire CLI](https://firebase.google.com/docs/flutter/setup)로 생성합니다.
+**Q. 검색 결과가 이상해요.**
+음식 검색 화면의 **"검색 결과가 이상하신가요?"**에서 바로 알려주세요. 영양성분 오류, 브랜드 정보 오류 등을 확인해 반영할게요.
 
-```bash
-flutterfire configure --project=cal-cal-app
-```
+**Q. 탈퇴하면 기록은 어떻게 되나요?**
+설정 → 회원 탈퇴를 하면 계정과 모든 식단 기록이 삭제되며 복구할 수 없어요.
 
-생성되는 파일 (모두 `.gitignore` 대상):
+**Q. 알림이 안 와요.**
+기기 설정에서 칼캘의 알림 권한이 켜져 있는지 확인해 주세요.
 
-- `lib/firebase_options.dart`
-- `ios/Runner/GoogleService-Info.plist`
-- `android/app/google-services.json`
+## 문의
 
-### 2. Cloud Functions 환경 변수
+앱 내 **설정 → 고객지원**에서 문의하거나 오류를 신고할 수 있어요.
 
-```bash
-cp functions/.env.example functions/.env
-```
+- 이메일: kyomdev@gmail.com
 
-`functions/.env`에 값을 채웁니다.
-
-| 변수 | 설명 |
-|---|---|
-| `FOOD_API_KEY` | 공공데이터포털 식품영양성분DB 인증키 (Encoding 키) |
-| `GEMINI_API_KEY` | Google AI Studio API 키 |
-| `APP_STORE_ENVIRONMENT` | `sandbox`(기본) 또는 `production` |
-
-### 3. Secret Manager
-
-`.p8` 비밀키 등은 `.env`가 아닌 Secret Manager로 관리합니다.
-
-```bash
-firebase functions:secrets:set APPLE_SIGNIN_KEY_ID
-firebase functions:secrets:set APPLE_SIGNIN_PRIVATE_KEY
-firebase functions:secrets:set APP_STORE_ISSUER_ID
-firebase functions:secrets:set APP_STORE_KEY_ID
-firebase functions:secrets:set APP_STORE_PRIVATE_KEY
-```
-
-### 4. Kakao
-
-Kakao 네이티브 앱 키는 앱에 포함되는 공개 키이며 아래 세 곳의 값이 일치해야 합니다.
-
-- `lib/main.dart`의 `_kakaoNativeAppKey`
-- `ios/Runner/Info.plist`의 URL scheme `kakao{키}`
-- `android/app/src/main/AndroidManifest.xml`의 scheme `kakao{키}`
-
-Kakao Developers 콘솔 **[앱] → [플랫폼 키] → [네이티브 앱 키]**에 iOS 번들 ID와 Android 패키지명/키 해시를 등록해야 로그인이 동작합니다.
-
-## 실행
-
-```bash
-flutter pub get
-cd ios && pod install && cd ..
-flutter run
-```
-
-### Cloud Functions 배포
-
-```bash
-cd functions && npm install
-firebase deploy --only functions
-firebase deploy --only firestore:rules,firestore:indexes
-```
-
-## 보안 메모
-
-- API 키·비밀키는 절대 커밋하지 않습니다. `.env*`, `*.p8`, `*.p12`, `*.jks`, Firebase 설정 파일은 `.gitignore`로 차단되어 있습니다.
-- 클라이언트는 외부 API 키를 갖지 않으며, 모든 외부 API 호출은 Cloud Functions를 거칩니다.
-- Firestore 규칙상 사용자는 본인 데이터만 접근할 수 있고, 구독 상태·스캔 한도·닉네임 인덱스는 서버(Admin SDK)만 쓸 수 있습니다.
-
-## 문서
+## 약관 및 정책
 
 - [개인정보처리방침](docs/privacy_policy.md)
 - [이용약관](docs/terms_of_service.md)
+
+---
+
+개발 환경 설정과 프로젝트 구조는 [개발 가이드](docs/DEVELOPMENT.md)를 참고하세요.
