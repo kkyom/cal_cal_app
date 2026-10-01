@@ -1,0 +1,59 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      // appAccountToken은 getOrCreateAppAccountToken Cloud Function(Admin SDK)만
+      // 쓸 수 있다. 클라이언트가 이 값을 스스로 바꾸면 구매-uid 매핑이 깨진다.
+      // create/update를 나누는 이유: 신규 유저 문서 생성 시점엔 resource(기존
+      // 문서)가 없어 diff()를 쓸 수 없다.
+      allow create: if request.auth != null && request.auth.uid == uid
+        && !request.resource.data.keys().hasAny(['appAccountToken']);
+      allow update: if request.auth != null && request.auth.uid == uid
+        && !request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['appAccountToken']);
+
+      match /meals/{date} {
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
+    }
+
+    // 닉네임 중복확인용 고유 인덱스({normalized nickname}: uid). 실시간 중복
+    // 힌트를 위해 읽기는 로그인 사용자 모두 허용하고, 쓰기는 원자적 중복확인이
+    // 필요해 Cloud Functions(updateNickname, Admin SDK)만 하도록 막는다.
+    match /nicknames/{nickname} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // 음식 검색 캐시: Cloud Functions(Admin SDK)만 접근. 클라이언트 읽기/쓰기 금지.
+    match /foodSearchCache/{cacheId} {
+      allow read, write: if false;
+    }
+
+    // 영양성분표 스캔 무료 한도(등급·일일 횟수): 조작 방지를 위해
+    // Cloud Functions(Admin SDK)만 쓸 수 있다. 본인 건 읽기만 허용
+    // (추후 "오늘 n/3 사용" 같은 UI에 쓸 수 있게).
+    match /nutritionScanQuota/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // 구독(Pro) 상태: App Store Server API/Notifications를 처리하는
+    // Cloud Functions(Admin SDK)만 쓸 수 있다. 클라이언트가 직접 isPro를
+    // 켤 수 없도록 쓰기는 전면 차단하고, 본인 건 읽기만 허용한다.
+    match /subscriptions/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // appAccountToken(UUID) -> uid 역방향 인덱스. App Store Server
+    // Notifications 웹훅이 어떤 유저의 구독인지 찾을 때 쓴다(nicknames와
+    // 동일 패턴). 클라이언트는 발급 시점에 Cloud Function을 통해서만 쓴다.
+    match /appAccountTokens/{token} {
+      allow read: if false;
+      allow write: if false;
+    }
+  }
+}

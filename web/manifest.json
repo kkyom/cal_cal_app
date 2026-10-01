@@ -1,6 +1,6 @@
 {
-    "name": "cal_cal_app",
-    "short_name": "cal_cal_app",
+    "name": "칼캘: 칼로리 캘린더",
+    "short_name": "칼캘",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

@@ -57,6 +57,7 @@ app.*.map.json
 *.p12
 GoogleService-Info.plist
 google-services.json
+lib/firebase_options.dart
 
 # 2. iOS / Xcode 관련 (매우 중요)
 ios/Pods/

@@ -1,0 +1,44 @@
+{
+    "flutter": {
+        "platforms": {
+            "android": {
+                "default": {
+                    "projectId": "cal-cal-app",
+                    "appId": "1:187584528817:android:7d666f9252f09c30a63d90",
+                    "fileOutput": "android/app/google-services.json"
+                }
+            },
+            "ios": {
+                "default": {
+                    "projectId": "cal-cal-app",
+                    "appId": "1:187584528817:ios:51e4a5cbbafdc0c8a63d90",
+                    "uploadDebugSymbols": false,
+                    "fileOutput": "ios/Runner/GoogleService-Info.plist"
+                }
+            },
+            "dart": {
+                "lib/firebase_options.dart": {
+                    "projectId": "cal-cal-app",
+                    "configurations": {
+                        "android": "1:187584528817:android:7d666f9252f09c30a63d90",
+                        "ios": "1:187584528817:ios:51e4a5cbbafdc0c8a63d90"
+                    }
+                }
+            }
+        }
+    },
+    "functions": {
+        "source": "functions",
+        "ignore": [
+            "node_modules",
+            ".git",
+            "firebase-debug.log",
+            "firebase-debug.*.log",
+            "*.local"
+        ]
+    },
+    "firestore": {
+        "rules": "firestore.rules",
+        "indexes": "firestore.indexes.json"
+    }
+}

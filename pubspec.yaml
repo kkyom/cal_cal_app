@@ -1,5 +1,5 @@
 name: cal_cal_app
-description: "A new Flutter project."
+description: "칼캘(CalCal) - 칼로리 캘린더 앱"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.1.0+6
 
 environment:
   sdk: ^3.11.1
@@ -30,10 +30,30 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
 
   cupertino_icons: ^1.0.8
-  hive: ^2.2.3
-  hive_flutter: ^1.1.0
+  firebase_core: ^4.0.0
+  firebase_auth: ^6.1.0
+  cloud_firestore: ^6.1.0
+  cloud_functions: ^6.1.0
+  firebase_messaging: ^16.0.4
+  google_sign_in: ^7.1.1
+  sign_in_with_apple: ^7.0.1
+  kakao_flutter_sdk_user: ^2.0.0+1
+  keyboard_actions: ^4.2.0
+  connectivity_plus: ^7.3.1
+  url_launcher: ^6.3.2
+  image_picker: ^1.2.3
+  firebase_app_check: ^0.4.6
+  package_info_plus: ^8.0.0
+  device_info_plus: ^11.0.0
+  # google_mobile_ads: ^9.1.0  # 무료 출시로 광고 비활성화 (추후 복구 시 주석 해제)
+  # app_tracking_transparency: ^2.0.7  # 광고 비활성화로 ATT 미사용 (추후 복구 시 주석 해제)
+  flutter_local_notifications: ^19.4.2
+  timezone: ^0.10.1
+  # in_app_purchase: ^3.2.5  # 무료 출시로 인앱결제 비활성화 (추후 복구 시 주석 해제)
 
 dev_dependencies:
   flutter_test:
@@ -56,6 +76,9 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - assets/help/
 
   # To add assets to your application, add an assets section, like this:
   # assets:
