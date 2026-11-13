@@ -248,8 +248,8 @@ Map<dynamic, dynamic>? _unwrapCallablePayload(dynamic data) {
 }
 
 FirebaseFunctions _firebaseFunctionsForSearch() {
-  final r = _kFirebaseFunctionsRegion?.trim();
-  if (r == null || r.isEmpty) return FirebaseFunctions.instance;
+  final r = _kFirebaseFunctionsRegion.trim();
+  if (r.isEmpty) return FirebaseFunctions.instance;
   return FirebaseFunctions.instanceFor(region: r);
 }
 
