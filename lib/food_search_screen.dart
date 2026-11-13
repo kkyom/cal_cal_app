@@ -22,7 +22,7 @@ import 'dart:convert' show jsonDecode;
 const Duration _kSearchDebounce = Duration(milliseconds: 500);
 
 /// `searchFood`가 배포된 리전(콘솔과 동일).
-const String? _kFirebaseFunctionsRegion = 'asia-northeast3';
+const String _kFirebaseFunctionsRegion = 'asia-northeast3';
 
 const String _kSearchUserError =
     '식품 정보를 불러오지 못했어요.\n잠시 후 다시 시도해 주세요.';
