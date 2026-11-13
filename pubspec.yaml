@@ -53,6 +53,7 @@ dependencies:
   # app_tracking_transparency: ^2.0.7  # 광고 비활성화로 ATT 미사용 (추후 복구 시 주석 해제)
   flutter_local_notifications: ^19.4.2
   timezone: ^0.10.1
+  firebase_remote_config: ^6.7.1
   # in_app_purchase: ^3.2.5  # 무료 출시로 인앱결제 비활성화 (추후 복구 시 주석 해제)
 
 dev_dependencies:

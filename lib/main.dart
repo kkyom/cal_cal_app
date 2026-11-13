@@ -10,6 +10,7 @@ import 'calorie_dashboard.dart';
 import 'connectivity_gate.dart';
 import 'firebase_options.dart';
 import 'firestore_service.dart';
+import 'force_update_gate.dart';
 import 'help_tutorial_screen.dart';
 import 'keyboard_dismiss.dart';
 import 'login_screen.dart';
@@ -61,7 +62,8 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF3F5F8B)),
       ),
-      home: const ConnectivityGate(child: AuthGate()),
+      // 강제 업데이트 확인은 Firestore 를 쓰기 전(AuthGate 앞)에 한다.
+      home: const ConnectivityGate(child: ForceUpdateGate(child: AuthGate())),
     );
   }
 }
