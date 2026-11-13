@@ -114,6 +114,10 @@ firebase deploy --only functions
 firebase deploy --only firestore:rules,firestore:indexes
 ```
 
+## 커밋 메시지
+
+커밋 메시지는 Conventional Commits 형식으로 씁니다. 자세한 규칙은 [COMMIT_CONVENTION.md](COMMIT_CONVENTION.md)를 참고하세요.
+
 ## 보안 메모
 
 - API 키·비밀키는 절대 커밋하지 않습니다. `.env*`, `*.p8`, `*.p12`, `*.jks`, Firebase 설정 파일은 `.gitignore`로 차단되어 있습니다.
