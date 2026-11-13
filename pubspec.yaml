@@ -34,11 +34,11 @@ dependencies:
     sdk: flutter
 
   cupertino_icons: ^1.0.8
-  firebase_core: ^4.0.0
-  firebase_auth: ^6.1.0
-  cloud_firestore: ^6.1.0
-  cloud_functions: ^6.1.0
-  firebase_messaging: ^16.0.4
+  firebase_core: ^4.15.2  # eMudhra CA 보안 패치 (iOS SDK 12.19.3)
+  firebase_auth: ^6.7.1
+  cloud_firestore: ^6.10.2  # eMudhra CA 보안 패치
+  cloud_functions: ^6.5.1
+  firebase_messaging: ^16.7.1
   google_sign_in: ^7.1.1
   sign_in_with_apple: ^7.0.1
   kakao_flutter_sdk_user: ^2.0.0+1
@@ -46,7 +46,7 @@ dependencies:
   connectivity_plus: ^7.3.1
   url_launcher: ^6.3.2
   image_picker: ^1.2.3
-  firebase_app_check: ^0.4.6
+  firebase_app_check: ^0.4.9
   package_info_plus: ^8.0.0
   device_info_plus: ^11.0.0
   # google_mobile_ads: ^9.1.0  # 무료 출시로 광고 비활성화 (추후 복구 시 주석 해제)
