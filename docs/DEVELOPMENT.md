@@ -12,7 +12,7 @@
 | 앱 | Flutter (Dart ^3.11), iOS / Android |
 | 인증 | Firebase Auth (Google, Apple, Kakao → Custom Token) |
 | 데이터 | Cloud Firestore, Firebase App Check |
-| 서버 | Cloud Functions for Firebase (Node.js 20) |
+| 서버 | Cloud Functions for Firebase (Node.js 22) |
 | 외부 API | 공공데이터포털 식품영양성분DB, Google Gemini, App Store Server API |
 | 알림 | Firebase Cloud Messaging, flutter_local_notifications |
 
