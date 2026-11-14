@@ -1286,6 +1286,55 @@ Rules:
 - kcal is required whenever any energy number is visible near 열량/칼로리/에너지 on the label — always extract it, even if the layout is unusual (line-wrapped, parenthesized unit like "열량(kcal)", or written as "약 250kcal"). Only use null for kcal if no energy number appears anywhere on the label.
 - Use null for unreadable fields. Numbers must be non-negative plain numbers (no unit suffix).`;
 
+// 위 프롬프트의 JSON 형식을 Gemini 구조화 출력(responseSchema)으로도
+// 강제한다. 필드 이름이 바뀌거나 형식이 어긋나 해석에 실패하는 일을 줄인다.
+// 필드를 바꿀 때는 프롬프트와 lib/nutrition_label_ocr.dart의 fromAiMap도
+// 함께 맞춰야 한다.
+const nullableNumber = { type: "NUMBER", nullable: true };
+const NUTRITION_LABEL_RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    name: { type: "STRING", nullable: true },
+    kcal: nullableNumber,
+    carb: nullableNumber,
+    protein: nullableNumber,
+    fat: nullableNumber,
+    fiber: nullableNumber,
+    isPerHundred: { type: "BOOLEAN" },
+    isPerPiece: { type: "BOOLEAN" },
+    basisLabel: { type: "STRING", nullable: true },
+    basisAmount: nullableNumber,
+    basisUnit: {
+      type: "STRING",
+      format: "enum",
+      enum: ["g", "ml", "개", "봉", "봉지", "포", "팩"],
+      nullable: true,
+    },
+    totalContentAmount: nullableNumber,
+    totalContentUnit: {
+      type: "STRING",
+      format: "enum",
+      enum: ["g", "ml"],
+      nullable: true,
+    },
+  },
+  required: [
+    "name",
+    "kcal",
+    "carb",
+    "protein",
+    "fat",
+    "fiber",
+    "isPerHundred",
+    "isPerPiece",
+    "basisLabel",
+    "basisAmount",
+    "basisUnit",
+    "totalContentAmount",
+    "totalContentUnit",
+  ],
+};
+
 // --- 무료 사용량 제한 ---
 // tier/scanCount는 `nutritionScanQuota/{uid}`에 Admin SDK로만 쓴다.
 // (firestore.rules에서 클라이언트 쓰기를 막아, 클라이언트가 직접 등급·횟수를
@@ -1304,17 +1353,20 @@ function todayInSeoul() {
 /**
  * 무료 등급의 하루 스캔 한도를 확인하고, 통과하면 원자적으로 1 증가시킨다.
  * 구독(subscribed) 등급은 무제한. 한도 초과 시 resource-exhausted를 던진다.
+ *
+ * 차감했으면 그 날짜(scanDate)를, 구독 등급이라 차감하지 않았으면 null을
+ * 돌려준다. [refundNutritionScanQuota]가 같은 날짜일 때만 되돌리는 데 쓴다.
  */
 async function consumeNutritionScanQuota(uid) {
   const db = admin.firestore();
   const quotaRef = db.collection(NUTRITION_SCAN_QUOTA_COLLECTION).doc(uid);
   const today = todayInSeoul();
 
-  await db.runTransaction(async (tx) => {
+  return db.runTransaction(async (tx) => {
     const snap = await tx.get(quotaRef);
     const data = snap.exists ? snap.data() : {};
     const tier = data.tier === "subscribed" ? "subscribed" : "free";
-    if (tier === "subscribed") return;
+    if (tier === "subscribed") return null;
 
     const count = data.scanDate === today ? data.scanCount || 0 : 0;
     if (count >= FREE_DAILY_SCAN_LIMIT) {
@@ -1329,7 +1381,35 @@ async function consumeNutritionScanQuota(uid) {
       { tier, scanDate: today, scanCount: count + 1 },
       { merge: true }
     );
+    return today;
   });
+}
+
+/**
+ * Gemini가 오류로 응답했거나 네트워크·시간 초과로 결과를 못 받았을 때
+ * [consumeNutritionScanQuota]로 차감한 1회를 되돌린다. 이런 실패는
+ * Gemini 비용이 (거의) 나가지 않았는데 사용자 횟수만 줄어드는 경우다.
+ *
+ * 차감한 날짜([scanDate])와 지금 문서의 날짜가 같을 때만 되돌린다 —
+ * 자정을 넘겨 새 날의 횟수를 깎는 일을 막는다. 실패해도 원래 오류를
+ * 가리지 않도록 예외는 로그만 남긴다.
+ */
+async function refundNutritionScanQuota(uid, scanDate) {
+  if (!scanDate) return;
+  const db = admin.firestore();
+  const quotaRef = db.collection(NUTRITION_SCAN_QUOTA_COLLECTION).doc(uid);
+  try {
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(quotaRef);
+      const data = snap.exists ? snap.data() : {};
+      if (data.scanDate !== scanDate) return;
+      const count = data.scanCount || 0;
+      if (count <= 0) return;
+      tx.update(quotaRef, { scanCount: count - 1 });
+    });
+  } catch (error) {
+    console.error("스캔 횟수 환불 실패:", error?.message ?? error);
+  }
 }
 
 function extractGeminiJsonText(data) {
@@ -1359,7 +1439,7 @@ function parseGeminiJson(text) {
 }
 
 /**
- * 영양성분표 사진을 Gemini 2.5 Flash-Lite로 구조화 추출한다.
+ * 영양성분표 사진을 Gemini([GEMINI_MODEL])로 구조화 추출한다.
  *
  * data: { imageBase64: string, mimeType?: string }
  * 로그인 사용자만 호출 가능하고, 정식 앱(App Check 통과)에서만 호출 가능
@@ -1421,12 +1501,12 @@ exports.parseNutritionLabel = functions
       );
     }
 
-    await consumeNutritionScanQuota(context.auth.uid);
+    const chargedScanDate = await consumeNutritionScanQuota(context.auth.uid);
 
     const started = Date.now();
     try {
       const response = await axios.post(
-        `${GEMINI_URL}?key=${encodeURIComponent(apiKey)}`,
+        GEMINI_URL,
         {
           contents: [
             {
@@ -1447,11 +1527,17 @@ exports.parseNutritionLabel = functions
           generationConfig: {
             temperature: 0,
             responseMimeType: "application/json",
+            responseSchema: NUTRITION_LABEL_RESPONSE_SCHEMA,
           },
         },
         {
           timeout: 45000,
-          headers: { "Content-Type": "application/json" },
+          // 키를 URL(?key=)에 붙이면 프록시·오류 로그에 남기 쉬워서
+          // Google 권장대로 헤더로 보낸다.
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey,
+          },
           validateStatus: () => true,
         }
       );
@@ -1465,6 +1551,8 @@ exports.parseNutritionLabel = functions
           status: response.status,
           apiMsg,
         });
+        // Gemini 오류 응답은 과금되지 않으므로 사용자 횟수도 돌려준다.
+        await refundNutritionScanQuota(context.auth.uid, chargedScanDate);
         throw new functions.https.HttpsError(
           "internal",
           `영양성분표 인식에 실패했습니다: ${apiMsg}`
@@ -1496,6 +1584,10 @@ exports.parseNutritionLabel = functions
     } catch (error) {
       if (error instanceof functions.https.HttpsError) throw error;
       console.error("parseNutritionLabel 예외:", error?.message ?? error);
+      // 네트워크 끊김·시간 초과 등으로 결과를 받지 못했다. 응답을 받고
+      // 해석만 실패한 경우(HttpsError로 위에서 다시 던짐)는 과금됐으므로
+      // 되돌리지 않는다.
+      await refundNutritionScanQuota(context.auth.uid, chargedScanDate);
       throw new functions.https.HttpsError(
         "internal",
         `영양성분표 인식 중 문제가 발생했습니다: ${
