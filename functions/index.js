@@ -1457,7 +1457,7 @@ exports.parseNutritionLabel = functions
     const started = Date.now();
     try {
       const response = await axios.post(
-        `${GEMINI_URL}?key=${encodeURIComponent(apiKey)}`,
+        GEMINI_URL,
         {
           contents: [
             {
@@ -1482,7 +1482,12 @@ exports.parseNutritionLabel = functions
         },
         {
           timeout: 45000,
-          headers: { "Content-Type": "application/json" },
+          // 키를 URL(?key=)에 붙이면 프록시·오류 로그에 남기 쉬워서
+          // Google 권장대로 헤더로 보낸다.
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey,
+          },
           validateStatus: () => true,
         }
       );
