@@ -13,6 +13,8 @@ import 'settings_screen.dart';
 import 'notification_settings_screen.dart';
 // import 'subscription_screen.dart'; // 결제 비활성화
 import 'onboarding_screen.dart';
+import 'food_photo_analysis_screen.dart';
+import 'nutrition_scan_quota.dart';
 import 'responsive_content.dart';
 
 // --- 색상 상수 ---
@@ -97,6 +99,10 @@ class _CalorieDashboardPageState extends State<CalorieDashboardPage> {
 
   DateTime? _goalDate;
 
+  /// 사진 AI 기록 안내 배너를 닫았거나 한 번 써봤는지. true면 배너 대신
+  /// 우하단 플로팅 버튼을 보여준다.
+  bool _photoAiIntroDone = false;
+
   /// 기기 로컬 날짜 기준으로 보고 있는 날 (식단·매크로는 이 날짜에만 묶임)
   late DateTime _selectedDate;
 
@@ -147,6 +153,7 @@ class _CalorieDashboardPageState extends State<CalorieDashboardPage> {
       _proteinGoal = FirestoreService.loadProteinGoal();
       _fatGoal = FirestoreService.loadFatGoal();
       _goalDate = FirestoreService.loadGoalDate();
+      _photoAiIntroDone = FirestoreService.loadPhotoAiIntroDone();
     });
 
     _refreshAutoMacroGoalsIfNeeded();
@@ -379,6 +386,60 @@ class _CalorieDashboardPageState extends State<CalorieDashboardPage> {
     _showCenterToast('추가 완료!');
   }
 
+  /// 홈의 배너·플로팅 버튼에서 여는 음식 사진 AI 기록.
+  /// 촬영 방법을 고르고, 분석 결과에서 고른 식사에 음식들을 한 번에 추가한다.
+  Future<void> _openPhotoAi() async {
+    NutritionScanQuotaStatus quota;
+    try {
+      quota = await fetchNutritionScanQuotaStatus();
+    } catch (e) {
+      // 남은 횟수 조회가 실패해도 기능은 쓸 수 있게 한다 — 실제 한도는 서버가 막는다.
+      debugPrint('사진 AI 남은 횟수 조회 실패: $e');
+      quota = const NutritionScanQuotaStatus(
+        isSubscribed: false,
+        remaining: kFreeDailyScanLimit,
+      );
+    }
+    if (!mounted) return;
+
+    final source = await showFoodPhotoSourceSheet(context, quota);
+    if (source == null || !mounted) return;
+
+    final result = await Navigator.push<FoodPhotoLogResult>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => FoodPhotoAnalysisScreen(
+          initialSource: source,
+          meals: List.of(_meals),
+        ),
+      ),
+    );
+    if (!mounted || result == null || result.foods.isEmpty) return;
+
+    final index = _meals.indexWhere((m) => m.id == result.mealId);
+    if (index < 0) {
+      _showCenterToast('기록할 식사를 찾지 못했어요');
+      return;
+    }
+    final meal = _meals[index];
+    setState(() {
+      _meals[index] = meal.copyWith(foods: [...meal.foods, ...result.foods]);
+      _photoAiIntroDone = true;
+    });
+    FirestoreService.saveMealsForDate(
+      _selectedDate,
+      _meals,
+      goalKcal: _totalKcal.toDouble(),
+    );
+    FirestoreService.markPhotoAiIntroDone();
+    _showCenterToast('${meal.name}에 기록했어요');
+  }
+
+  void _dismissPhotoAiBanner() {
+    setState(() => _photoAiIntroDone = true);
+    FirestoreService.markPhotoAiIntroDone();
+  }
+
   void _showCenterToast(String message) {
     showCenterToast(context, message);
   }
@@ -457,16 +518,34 @@ class _CalorieDashboardPageState extends State<CalorieDashboardPage> {
     final isMaintain =
         FirestoreService.loadPurpose() == OnboardingPurpose.maintain;
 
+    final showPhotoFab = _photoAiIntroDone && !_reorderMode;
+
     return Scaffold(
       backgroundColor: _bgColor,
+      floatingActionButton: showPhotoFab
+          ? FloatingActionButton.extended(
+              onPressed: _openPhotoAi,
+              backgroundColor: _cardBgColor,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              icon: const Icon(Icons.photo_camera_outlined),
+              label: const Text(
+                '사진으로 기록',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+              ),
+            )
+          : null,
       body: SafeArea(
         bottom: false,
         child: SingleChildScrollView(
+          // 플로팅 버튼이 마지막 식사 카드를 가리지 않도록 그만큼 더 띄운다.
           padding: EdgeInsets.fromLTRB(
             20,
             20,
             20,
-            20 + MediaQuery.paddingOf(context).bottom,
+            20 + MediaQuery.paddingOf(context).bottom + (showPhotoFab ? 80 : 0),
           ),
           child: ResponsiveContent(
             maxWidth: 420,
@@ -697,6 +776,14 @@ class _CalorieDashboardPageState extends State<CalorieDashboardPage> {
                     macroPercent: _macroPercent,
                     onEditGoal: _openGoalEdit,
                   ),
+
+                  if (!_photoAiIntroDone) ...[
+                    const SizedBox(height: 16),
+                    _PhotoAiBanner(
+                      onTap: _openPhotoAi,
+                      onDismiss: _dismissPhotoAiBanner,
+                    ),
+                  ],
 
                   const SizedBox(height: 16),
 
@@ -989,6 +1076,76 @@ class _DashboardCard extends StatelessWidget {
             color: _fatColor,
           ),
         ],
+      ),
+    );
+  }
+}
+
+// --- 사진 AI 기록 안내 배너 ---
+/// 처음 쓰는 사람에게 사진 AI 기록을 알려주는 배너. 닫거나 한 번 쓰면
+/// 사라지고, 그 뒤로는 우하단 플로팅 버튼으로 같은 기능을 연다.
+class _PhotoAiBanner extends StatelessWidget {
+  final VoidCallback onTap;
+  final VoidCallback onDismiss;
+
+  const _PhotoAiBanner({required this.onTap, required this.onDismiss});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: _cardBgColor,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 16, 8, 16),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.18),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.photo_camera_outlined,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 14),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '사진으로 AI 기록',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      '음식 사진 한 장이면 칼로리를 계산해요',
+                      style: TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: onDismiss,
+                icon: const Icon(Icons.close, size: 18),
+                color: Colors.white70,
+                tooltip: '배너 닫기',
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

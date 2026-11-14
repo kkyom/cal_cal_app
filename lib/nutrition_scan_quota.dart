@@ -1,4 +1,4 @@
-/// `parseNutritionLabel`(functions/index.js)의 무료 일일 한도를 클라이언트에서
+/// `parseNutritionLabel`·`analyzeFoodPhoto`(functions/index.js)가 함께 쓰는 무료 일일 한도를 클라이언트에서
 /// 조회·표시하기 위한 공용 유틸. 스캔 화면(실시간 구독)과 검색 화면(진입 전
 /// 1회 체크) 양쪽에서 같은 기준으로 써야 하므로 여기 하나로 모아둔다.
 library;

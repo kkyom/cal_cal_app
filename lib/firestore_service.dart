@@ -456,6 +456,28 @@ class FirestoreService {
     );
   }
 
+  // --- 사진 AI 기록 안내 배너 ---
+
+  /// 홈의 "사진으로 AI 기록" 배너를 닫았거나 사진으로 한 번 기록했는지.
+  /// true면 배너 대신 우하단 플로팅 버튼만 보여준다.
+  static bool loadPhotoAiIntroDone() =>
+      _userDoc['photoAiIntroDone'] as bool? ?? false;
+
+  static Future<void> markPhotoAiIntroDone() async {
+    if (loadPhotoAiIntroDone()) return;
+    _userDoc = {..._userDoc, 'photoAiIntroDone': true};
+    final uid = _uid;
+    if (uid == null) return;
+    try {
+      await _userRef(uid).set(
+        {'photoAiIntroDone': true},
+        SetOptions(merge: true),
+      );
+    } catch (e) {
+      debugPrint('FirestoreService: 사진 AI 안내 상태 저장 실패: $e');
+    }
+  }
+
   // --- 하루 기록 리마인더 동의 화면 ---
 
   static bool loadReminderPromptSeen() =>
