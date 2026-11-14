@@ -1304,17 +1304,20 @@ function todayInSeoul() {
 /**
  * 무료 등급의 하루 스캔 한도를 확인하고, 통과하면 원자적으로 1 증가시킨다.
  * 구독(subscribed) 등급은 무제한. 한도 초과 시 resource-exhausted를 던진다.
+ *
+ * 차감했으면 그 날짜(scanDate)를, 구독 등급이라 차감하지 않았으면 null을
+ * 돌려준다. [refundNutritionScanQuota]가 같은 날짜일 때만 되돌리는 데 쓴다.
  */
 async function consumeNutritionScanQuota(uid) {
   const db = admin.firestore();
   const quotaRef = db.collection(NUTRITION_SCAN_QUOTA_COLLECTION).doc(uid);
   const today = todayInSeoul();
 
-  await db.runTransaction(async (tx) => {
+  return db.runTransaction(async (tx) => {
     const snap = await tx.get(quotaRef);
     const data = snap.exists ? snap.data() : {};
     const tier = data.tier === "subscribed" ? "subscribed" : "free";
-    if (tier === "subscribed") return;
+    if (tier === "subscribed") return null;
 
     const count = data.scanDate === today ? data.scanCount || 0 : 0;
     if (count >= FREE_DAILY_SCAN_LIMIT) {
@@ -1329,7 +1332,35 @@ async function consumeNutritionScanQuota(uid) {
       { tier, scanDate: today, scanCount: count + 1 },
       { merge: true }
     );
+    return today;
   });
+}
+
+/**
+ * Gemini가 오류로 응답했거나 네트워크·시간 초과로 결과를 못 받았을 때
+ * [consumeNutritionScanQuota]로 차감한 1회를 되돌린다. 이런 실패는
+ * Gemini 비용이 (거의) 나가지 않았는데 사용자 횟수만 줄어드는 경우다.
+ *
+ * 차감한 날짜([scanDate])와 지금 문서의 날짜가 같을 때만 되돌린다 —
+ * 자정을 넘겨 새 날의 횟수를 깎는 일을 막는다. 실패해도 원래 오류를
+ * 가리지 않도록 예외는 로그만 남긴다.
+ */
+async function refundNutritionScanQuota(uid, scanDate) {
+  if (!scanDate) return;
+  const db = admin.firestore();
+  const quotaRef = db.collection(NUTRITION_SCAN_QUOTA_COLLECTION).doc(uid);
+  try {
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(quotaRef);
+      const data = snap.exists ? snap.data() : {};
+      if (data.scanDate !== scanDate) return;
+      const count = data.scanCount || 0;
+      if (count <= 0) return;
+      tx.update(quotaRef, { scanCount: count - 1 });
+    });
+  } catch (error) {
+    console.error("스캔 횟수 환불 실패:", error?.message ?? error);
+  }
 }
 
 function extractGeminiJsonText(data) {
@@ -1421,7 +1452,7 @@ exports.parseNutritionLabel = functions
       );
     }
 
-    await consumeNutritionScanQuota(context.auth.uid);
+    const chargedScanDate = await consumeNutritionScanQuota(context.auth.uid);
 
     const started = Date.now();
     try {
@@ -1465,6 +1496,8 @@ exports.parseNutritionLabel = functions
           status: response.status,
           apiMsg,
         });
+        // Gemini 오류 응답은 과금되지 않으므로 사용자 횟수도 돌려준다.
+        await refundNutritionScanQuota(context.auth.uid, chargedScanDate);
         throw new functions.https.HttpsError(
           "internal",
           `영양성분표 인식에 실패했습니다: ${apiMsg}`
@@ -1496,6 +1529,10 @@ exports.parseNutritionLabel = functions
     } catch (error) {
       if (error instanceof functions.https.HttpsError) throw error;
       console.error("parseNutritionLabel 예외:", error?.message ?? error);
+      // 네트워크 끊김·시간 초과 등으로 결과를 받지 못했다. 응답을 받고
+      // 해석만 실패한 경우(HttpsError로 위에서 다시 던짐)는 과금됐으므로
+      // 되돌리지 않는다.
+      await refundNutritionScanQuota(context.auth.uid, chargedScanDate);
       throw new functions.https.HttpsError(
         "internal",
         `영양성분표 인식 중 문제가 발생했습니다: ${
