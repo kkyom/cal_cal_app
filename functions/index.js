@@ -1439,7 +1439,7 @@ function parseGeminiJson(text) {
 }
 
 /**
- * 영양성분표 사진을 Gemini 2.5 Flash-Lite로 구조화 추출한다.
+ * 영양성분표 사진을 Gemini([GEMINI_MODEL])로 구조화 추출한다.
  *
  * data: { imageBase64: string, mimeType?: string }
  * 로그인 사용자만 호출 가능하고, 정식 앱(App Check 통과)에서만 호출 가능

@@ -26,9 +26,10 @@ const String _kFirebaseFunctionsRegion = 'asia-northeast3';
 /// 작은 `kcal` 숫자가 리사이즈 후 뭉개지기 쉽다. Cloud Function 업로드
 /// 상한(4MB, [MAX_IMAGE_BYTES] in functions/index.js)에는 여유가 있다.
 ///
-/// maxWidth는 Gemini의 768px 타일 경계를 의식해서 잡는다 — 1536은
-/// 세로 사진 기준 타일 수를 1920 대비 한 단계 줄여 처리 속도를 높이면서도
-/// (모델을 gemini-3.1-flash-lite로 올린 뒤) kcal 인식은 유지되는 값이다.
+/// Gemini 3 계열은 사진 크기와 상관없이 이미지 1장을 고정 토큰(기본
+/// 약 1120)으로 처리하므로, maxWidth를 줄여도 Gemini 비용은 그대로다.
+/// 1536은 업로드 크기를 줄이면서도 gemini-3.1-flash-lite에서 작은 kcal
+/// 숫자 인식이 유지되는 값이다.
 const int _kScanMaxWidth = 1536;
 const int _kScanImageQuality = 90;
 
