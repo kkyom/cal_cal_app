@@ -39,5 +39,12 @@ end
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+    # 최신 Xcode는 iOS 15.0 미만 배포 대상을 거부한다. Flutter 등 일부 Pod가
+    # 13.0 이하로 잡혀 아카이브가 실패하므로 앱과 같은 15.5로 맞춘다.
+    target.build_configurations.each do |config|
+      if config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'].to_f < 15.5
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.5'
+      end
+    end
   end
 end
