@@ -1286,6 +1286,55 @@ Rules:
 - kcal is required whenever any energy number is visible near 열량/칼로리/에너지 on the label — always extract it, even if the layout is unusual (line-wrapped, parenthesized unit like "열량(kcal)", or written as "약 250kcal"). Only use null for kcal if no energy number appears anywhere on the label.
 - Use null for unreadable fields. Numbers must be non-negative plain numbers (no unit suffix).`;
 
+// 위 프롬프트의 JSON 형식을 Gemini 구조화 출력(responseSchema)으로도
+// 강제한다. 필드 이름이 바뀌거나 형식이 어긋나 해석에 실패하는 일을 줄인다.
+// 필드를 바꿀 때는 프롬프트와 lib/nutrition_label_ocr.dart의 fromAiMap도
+// 함께 맞춰야 한다.
+const nullableNumber = { type: "NUMBER", nullable: true };
+const NUTRITION_LABEL_RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    name: { type: "STRING", nullable: true },
+    kcal: nullableNumber,
+    carb: nullableNumber,
+    protein: nullableNumber,
+    fat: nullableNumber,
+    fiber: nullableNumber,
+    isPerHundred: { type: "BOOLEAN" },
+    isPerPiece: { type: "BOOLEAN" },
+    basisLabel: { type: "STRING", nullable: true },
+    basisAmount: nullableNumber,
+    basisUnit: {
+      type: "STRING",
+      format: "enum",
+      enum: ["g", "ml", "개", "봉", "봉지", "포", "팩"],
+      nullable: true,
+    },
+    totalContentAmount: nullableNumber,
+    totalContentUnit: {
+      type: "STRING",
+      format: "enum",
+      enum: ["g", "ml"],
+      nullable: true,
+    },
+  },
+  required: [
+    "name",
+    "kcal",
+    "carb",
+    "protein",
+    "fat",
+    "fiber",
+    "isPerHundred",
+    "isPerPiece",
+    "basisLabel",
+    "basisAmount",
+    "basisUnit",
+    "totalContentAmount",
+    "totalContentUnit",
+  ],
+};
+
 // --- 무료 사용량 제한 ---
 // tier/scanCount는 `nutritionScanQuota/{uid}`에 Admin SDK로만 쓴다.
 // (firestore.rules에서 클라이언트 쓰기를 막아, 클라이언트가 직접 등급·횟수를
@@ -1478,6 +1527,7 @@ exports.parseNutritionLabel = functions
           generationConfig: {
             temperature: 0,
             responseMimeType: "application/json",
+            responseSchema: NUTRITION_LABEL_RESPONSE_SCHEMA,
           },
         },
         {
