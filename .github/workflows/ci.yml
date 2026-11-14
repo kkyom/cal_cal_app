@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flutter:
+    name: Flutter analyze & test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.8
+          cache: true
+
+      # lib/firebase_options.dart는 .gitignore 대상이라 저장소에 없다.
+      # 분석·테스트용으로 더미 값을 넣은 파일을 만든다(실제 Firebase에는 연결하지 않음).
+      - name: Create stub firebase_options.dart
+        run: |
+          if [ ! -f lib/firebase_options.dart ]; then
+            cat > lib/firebase_options.dart <<'DART'
+          // CI 전용 더미 파일. 실제 값은 FlutterFire CLI로 생성한다.
+          // ignore_for_file: type=lint
+          import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+          import 'package:flutter/foundation.dart'
+              show defaultTargetPlatform, TargetPlatform;
+
+          class DefaultFirebaseOptions {
+            static FirebaseOptions get currentPlatform {
+              switch (defaultTargetPlatform) {
+                case TargetPlatform.iOS:
+                  return ios;
+                default:
+                  return android;
+              }
+            }
+
+            static const FirebaseOptions android = FirebaseOptions(
+              apiKey: 'ci-dummy',
+              appId: '1:000000000000:android:0000000000000000',
+              messagingSenderId: '000000000000',
+              projectId: 'ci-dummy',
+            );
+
+            static const FirebaseOptions ios = FirebaseOptions(
+              apiKey: 'ci-dummy',
+              appId: '1:000000000000:ios:0000000000000000',
+              messagingSenderId: '000000000000',
+              projectId: 'ci-dummy',
+            );
+          }
+          DART
+          fi
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze lib test
+
+      - name: Test
+        run: flutter test
+
+  functions:
+    name: Cloud Functions check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: functions
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Syntax check
+        run: for f in *.js; do node --check "$f"; done
+
+      - name: Load modules
+        run: node -e "require('./index.js')"
