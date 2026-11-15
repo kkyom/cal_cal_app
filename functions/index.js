@@ -1439,6 +1439,50 @@ function parseGeminiJson(text) {
 }
 
 /**
+ * callable 요청에서 이미지(base64)와 MIME 타입을 꺼내 검증한다.
+ * 영양성분표 인식과 음식 사진 분석이 같은 규칙을 쓴다.
+ */
+function readImagePayload(data) {
+  const imageBase64 = (
+    data?.imageBase64 ??
+    data?.data?.imageBase64 ??
+    ""
+  )
+    .toString()
+    .replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, "")
+    .replace(/\s+/g, "");
+  if (!imageBase64) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "이미지 데이터가 없습니다."
+    );
+  }
+
+  const approxBytes = Math.floor((imageBase64.length * 3) / 4);
+  if (approxBytes > MAX_IMAGE_BYTES) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "이미지가 너무 큽니다. 다시 촬영해 주세요."
+    );
+  }
+
+  let mimeType = (
+    data?.mimeType ??
+    data?.data?.mimeType ??
+    "image/jpeg"
+  )
+    .toString()
+    .trim()
+    .toLowerCase();
+  if (!["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(mimeType)) {
+    mimeType = "image/jpeg";
+  }
+  if (mimeType === "image/jpg") mimeType = "image/jpeg";
+
+  return { imageBase64, mimeType };
+}
+
+/**
  * 영양성분표 사진을 Gemini([GEMINI_MODEL])로 구조화 추출한다.
  *
  * data: { imageBase64: string, mimeType?: string }
@@ -1457,41 +1501,7 @@ exports.parseNutritionLabel = functions
       );
     }
 
-    const imageBase64 = (
-      data?.imageBase64 ??
-      data?.data?.imageBase64 ??
-      ""
-    )
-      .toString()
-      .replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, "")
-      .replace(/\s+/g, "");
-    if (!imageBase64) {
-      throw new functions.https.HttpsError(
-        "invalid-argument",
-        "이미지 데이터가 없습니다."
-      );
-    }
-
-    const approxBytes = Math.floor((imageBase64.length * 3) / 4);
-    if (approxBytes > MAX_IMAGE_BYTES) {
-      throw new functions.https.HttpsError(
-        "invalid-argument",
-        "이미지가 너무 큽니다. 다시 촬영해 주세요."
-      );
-    }
-
-    let mimeType = (
-      data?.mimeType ??
-      data?.data?.mimeType ??
-      "image/jpeg"
-    )
-      .toString()
-      .trim()
-      .toLowerCase();
-    if (!["image/jpeg", "image/jpg", "image/png", "image/webp"].includes(mimeType)) {
-      mimeType = "image/jpeg";
-    }
-    if (mimeType === "image/jpg") mimeType = "image/jpeg";
+    const { imageBase64, mimeType } = readImagePayload(data);
 
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -1591,6 +1601,175 @@ exports.parseNutritionLabel = functions
       throw new functions.https.HttpsError(
         "internal",
         `영양성분표 인식 중 문제가 발생했습니다: ${
+          error?.message ?? "unknown"
+        }`
+      );
+    }
+  });
+
+// --- 음식 사진 AI 분석 -------------------------------------------------
+// 영양성분표가 아니라 접시·음식 사진에서 음식 종류와 먹은 양을 추정한다.
+// 무료 일일 한도는 영양성분표 인식과 같은 nutritionScanQuota를 함께 쓴다.
+
+const FOOD_PHOTO_PROMPT = `You estimate the nutrition of a meal from a photo, for a Korean calorie-tracking app.
+Identify each distinct food or dish that is visible and estimate the amount that appears to be served.
+Return ONLY JSON with this exact schema:
+{
+  "isFood": boolean,
+  "foods": [
+    {
+      "name": string,
+      "portion": string,
+      "grams": number,
+      "kcal": number,
+      "carb": number,
+      "protein": number,
+      "fat": number
+    }
+  ]
+}
+
+Rules:
+- name: common Korean food name (e.g. "김치찌개", "공기밥", "계란말이", "아메리카노"). Do not include brand names unless clearly printed.
+- portion: short Korean portion description as seen (e.g. "1인분", "1공기", "2조각", "1잔").
+- grams: estimated edible weight (ml for drinks) of the visible portion. Must be > 0.
+- kcal/carb/protein/fat: totals for that estimated portion. carb/protein/fat are grams.
+- Treat side dishes (반찬) as separate foods only when they are clearly distinct; merge tiny garnishes into the main dish.
+- List at most 8 foods, largest calorie contributors first.
+- If the photo does not contain food or drink, set isFood=false and foods=[].
+- Numbers must be non-negative plain numbers (no unit suffix).`;
+
+const FOOD_PHOTO_RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    isFood: { type: "BOOLEAN" },
+    foods: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          name: { type: "STRING" },
+          portion: { type: "STRING" },
+          grams: { type: "NUMBER" },
+          kcal: { type: "NUMBER" },
+          carb: { type: "NUMBER" },
+          protein: { type: "NUMBER" },
+          fat: { type: "NUMBER" },
+        },
+        required: ["name", "portion", "grams", "kcal", "carb", "protein", "fat"],
+      },
+    },
+  },
+  required: ["isFood", "foods"],
+};
+
+/**
+ * 음식 사진을 Gemini([GEMINI_MODEL])로 분석해 음식별 추정 양·영양소를 돌려준다.
+ *
+ * data: { imageBase64: string, mimeType?: string }
+ * 로그인 + App Check 통과 요청만 받고, free 등급은 영양성분표 인식과 합쳐
+ * 하루 [FREE_DAILY_SCAN_LIMIT]회로 제한한다.
+ * 반환: { ok: true, analysis: { isFood, foods: [...] } }
+ */
+exports.analyzeFoodPhoto = functions
+  .region("asia-northeast3")
+  .runWith({ timeoutSeconds: 60, memory: "512MB", enforceAppCheck: true })
+  .https.onCall(async (data, context) => {
+    if (!context.auth) {
+      throw new functions.https.HttpsError(
+        "unauthenticated",
+        "로그인이 필요합니다."
+      );
+    }
+
+    const { imageBase64, mimeType } = readImagePayload(data);
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new functions.https.HttpsError(
+        "failed-precondition",
+        "GEMINI_API_KEY가 Functions 환경변수에 없습니다."
+      );
+    }
+
+    const chargedScanDate = await consumeNutritionScanQuota(context.auth.uid);
+
+    const started = Date.now();
+    try {
+      const response = await axios.post(
+        GEMINI_URL,
+        {
+          contents: [
+            {
+              role: "user",
+              parts: [
+                { text: FOOD_PHOTO_PROMPT },
+                { inlineData: { mimeType: mimeType, data: imageBase64 } },
+              ],
+            },
+          ],
+          generationConfig: {
+            temperature: 0,
+            responseMimeType: "application/json",
+            responseSchema: FOOD_PHOTO_RESPONSE_SCHEMA,
+          },
+        },
+        {
+          timeout: 45000,
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey,
+          },
+          validateStatus: () => true,
+        }
+      );
+
+      if (response.status >= 400) {
+        const apiMsg =
+          response.data?.error?.message ||
+          response.data?.message ||
+          `HTTP ${response.status}`;
+        console.error("Gemini 음식 사진 분석 실패:", {
+          status: response.status,
+          apiMsg,
+        });
+        await refundNutritionScanQuota(context.auth.uid, chargedScanDate);
+        throw new functions.https.HttpsError(
+          "internal",
+          `음식 사진 분석에 실패했습니다: ${apiMsg}`
+        );
+      }
+
+      const jsonText = extractGeminiJsonText(response.data);
+      const parsed = parseGeminiJson(jsonText);
+      if (!parsed || typeof parsed !== "object") {
+        console.error("Gemini 음식 사진 응답 JSON 파싱 실패:", {
+          preview: jsonText?.slice(0, 300),
+        });
+        throw new functions.https.HttpsError(
+          "internal",
+          "음식 사진 분석 결과를 해석하지 못했습니다."
+        );
+      }
+
+      const usage = response.data?.usageMetadata;
+      console.log("[timing] analyzeFoodPhoto", {
+        uid: context.auth.uid,
+        ms: Date.now() - started,
+        foods: Array.isArray(parsed.foods) ? parsed.foods.length : 0,
+        promptTokens: usage?.promptTokenCount,
+        outputTokens: usage?.candidatesTokenCount,
+        totalTokens: usage?.totalTokenCount,
+      });
+
+      return { ok: true, analysis: parsed };
+    } catch (error) {
+      if (error instanceof functions.https.HttpsError) throw error;
+      console.error("analyzeFoodPhoto 예외:", error?.message ?? error);
+      await refundNutritionScanQuota(context.auth.uid, chargedScanDate);
+      throw new functions.https.HttpsError(
+        "internal",
+        `음식 사진 분석 중 문제가 발생했습니다: ${
           error?.message ?? "unknown"
         }`
       );

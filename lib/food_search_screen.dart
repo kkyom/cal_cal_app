@@ -12,6 +12,7 @@ import 'center_toast.dart';
 import 'my_diet_screen.dart';
 import 'nutrition_label_scan_screen.dart';
 import 'nutrition_scan_quota.dart';
+import 'scan_source_widgets.dart';
 import 'responsive_content.dart';
 import 'support_screen.dart';
 import 'support_service.dart';
@@ -370,9 +371,6 @@ class _FoodSearchScreenState extends State<FoodSearchScreen> {
   Future<ImageSource?> _pickNutritionScanSource(
     NutritionScanQuotaStatus quota,
   ) {
-    final quotaText = quota.isSubscribed
-        ? 'AI 인식 무제한 이용 중'
-        : '오늘 남은 무료 인식 ${quota.remaining}/$kFreeDailyScanLimit회';
     return showDialog<ImageSource>(
       context: context,
       builder: (ctx) => Dialog(
@@ -409,28 +407,11 @@ class _FoodSearchScreenState extends State<FoodSearchScreen> {
               ),
               if (!quota.isExhausted) ...[
                 const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2196F3).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    quotaText,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF2196F3),
-                    ),
-                  ),
-                ),
+                ScanQuotaChip(quota: quota),
               ],
               const SizedBox(height: 20),
               if (quota.isExhausted)
-                _ScanQuotaExhaustedNotice(
+                ScanQuotaExhaustedNotice(
                   onSubscribeTap: () {
                     Navigator.pop(ctx);
                     // 결제 비활성화로 구독 화면 이동 임시 제거
@@ -444,14 +425,14 @@ class _FoodSearchScreenState extends State<FoodSearchScreen> {
                   },
                 )
               else ...[
-                _ScanSourceOption(
+                ScanSourceOption(
                   icon: Icons.photo_camera_outlined,
                   label: '사진 촬영',
                   description: '카메라로 바로 촬영해요',
                   onTap: () => Navigator.pop(ctx, ImageSource.camera),
                 ),
                 const SizedBox(height: 10),
-                _ScanSourceOption(
+                ScanSourceOption(
                   icon: Icons.photo_library_outlined,
                   label: '앨범에서 선택',
                   description: '저장된 사진을 불러와요',
@@ -973,166 +954,6 @@ class _FavoriteStarButtonState extends State<_FavoriteStarButton> {
       padding: EdgeInsets.zero,
       constraints: BoxConstraints(minWidth: boxSize, minHeight: boxSize),
       tooltip: _saved ? '마이 식단에서 삭제' : '마이 식단에 저장',
-    );
-  }
-}
-
-/// "이미지로 간편 기록하기" 다이얼로그의 선택지 한 줄(아이콘 + 라벨 + 설명).
-class _ScanSourceOption extends StatelessWidget {
-  const _ScanSourceOption({
-    required this.icon,
-    required this.label,
-    required this.description,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final String description;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: const Color(0xFFF6F8FB),
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: const Color(0xFF2196F3), size: 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      description,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.black45,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Icon(Icons.chevron_right, color: Colors.black26, size: 20),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 오늘 무료 인식을 다 썼을 때 촬영/앨범 선택지 대신 보여주는 안내.
-/// [onSubscribeTap]은 원래 구독 화면으로 이동시켰다 (결제 비활성화로 현재는 다이얼로그만 닫음).
-class _ScanQuotaExhaustedNotice extends StatelessWidget {
-  const _ScanQuotaExhaustedNotice({required this.onSubscribeTap});
-
-  final VoidCallback onSubscribeTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF6F8FB),
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.bedtime_outlined,
-                  color: Color(0xFF2196F3),
-                  size: 18,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      '오늘 무료 인식을 모두 사용했어요',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '내일 다시 $kFreeDailyScanLimit회 무료로 이용할 수 있어요',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.black45,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
-        Material(
-          color: const Color(0xFF2196F3),
-          borderRadius: BorderRadius.circular(14),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(14),
-            onTap: onSubscribeTap,
-            child: const Padding(
-              padding: EdgeInsets.symmetric(vertical: 14),
-              child: Center(
-                child: Text(
-                  '구독하고 기능 제한 없이 사용하기',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }
