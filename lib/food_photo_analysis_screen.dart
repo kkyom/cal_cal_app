@@ -131,12 +131,24 @@ class FoodPhotoAnalysisScreen extends StatefulWidget {
     super.key,
     required this.initialSource,
     required this.meals,
+    @visibleForTesting this.pickImage,
+    @visibleForTesting this.analyze,
+    @visibleForTesting this.now,
   });
 
   final ImageSource initialSource;
 
   /// 기록할 수 있는 식사 목록(대시보드에서 보고 있는 날짜).
   final List<MealEntry> meals;
+
+  /// 테스트에서 카메라·앨범 대신 쓸 사진 선택 함수. null이면 [ImagePicker].
+  final Future<XFile?> Function(ImageSource source)? pickImage;
+
+  /// 테스트에서 Cloud Function 대신 쓸 분석 함수. null이면 [analyzeFoodPhoto].
+  final Future<FoodPhotoAnalysis> Function(File file)? analyze;
+
+  /// 테스트에서 기본 식사 선택 시각을 고정하기 위한 시계. null이면 지금.
+  final DateTime Function()? now;
 
   @override
   State<FoodPhotoAnalysisScreen> createState() =>
@@ -159,6 +171,9 @@ class _FoodPhotoAnalysisScreenState extends State<FoodPhotoAnalysisScreen> {
   String? _error;
   bool _retriable = false;
   bool _quotaExceeded = false;
+
+  /// 인식된 음식을 사용자가 모두 지웠는지. "음식을 못 찾음"과 구분해 안내한다.
+  bool _removedAll = false;
 
   /// 분석이 끝나면 채워진다. 음식을 못 찾았으면 빈 목록.
   List<_Entry>? _entries;
@@ -191,7 +206,7 @@ class _FoodPhotoAnalysisScreenState extends State<FoodPhotoAnalysisScreen> {
 
   /// 지금 시각에 맞는 고정 식사(아침/점심/저녁)를 기본으로 고른다.
   String _defaultMealId() {
-    final hour = DateTime.now().hour;
+    final hour = (widget.now ?? DateTime.now)().hour;
     final name = hour < 10
         ? '아침'
         : hour < 15
@@ -215,11 +230,14 @@ class _FoodPhotoAnalysisScreenState extends State<FoodPhotoAnalysisScreen> {
   }) async {
     final XFile? picked;
     try {
-      picked = await _picker.pickImage(
-        source: source,
-        maxWidth: _kPhotoMaxWidth.toDouble(),
-        imageQuality: _kPhotoImageQuality,
-      );
+      final pick = widget.pickImage;
+      picked = pick != null
+          ? await pick(source)
+          : await _picker.pickImage(
+              source: source,
+              maxWidth: _kPhotoMaxWidth.toDouble(),
+              imageQuality: _kPhotoImageQuality,
+            );
     } catch (e) {
       debugPrint('음식 사진 선택 실패: $e');
       if (!mounted) return;
@@ -255,13 +273,14 @@ class _FoodPhotoAnalysisScreenState extends State<FoodPhotoAnalysisScreen> {
     });
 
     try {
-      final analysis = await analyzeFoodPhoto(File(path));
+      final analysis = await (widget.analyze ?? analyzeFoodPhoto)(File(path));
       if (!mounted) return;
       setState(() {
         _busy = false;
         _entries = [
           for (final f in analysis.foods) _Entry(f.toRecord(), f.amountLabel),
         ];
+        _removedAll = false;
       });
     } on FoodPhotoQuotaExceeded catch (e) {
       if (!mounted) return;
@@ -322,7 +341,10 @@ class _FoodPhotoAnalysisScreenState extends State<FoodPhotoAnalysisScreen> {
   }
 
   void _removeEntry(int index) {
-    setState(() => _entries!.removeAt(index));
+    setState(() {
+      _entries!.removeAt(index);
+      if (_entries!.isEmpty) _removedAll = true;
+    });
   }
 
   void _submit() {
@@ -538,9 +560,11 @@ class _FoodPhotoAnalysisScreenState extends State<FoodPhotoAnalysisScreen> {
       children: [
         _photo(),
         const SizedBox(height: 16),
-        const _Notice(
+        _Notice(
           icon: Icons.no_food_outlined,
-          text: '사진에서 음식을 찾지 못했어요. 음식이 잘 보이게 다시 찍어 주세요.',
+          text: _removedAll
+              ? '기록할 음식을 모두 지웠어요. 다시 찍거나 뒤로 가서 취소해 주세요.'
+              : '사진에서 음식을 찾지 못했어요. 음식이 잘 보이게 다시 찍어 주세요.',
           color: _primary,
         ),
         const SizedBox(height: 16),
